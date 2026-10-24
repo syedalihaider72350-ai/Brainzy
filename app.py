@@ -16,6 +16,41 @@ MAX_CHARS = 4000              # longest message a user can send
 MAX_FILE_MB = 10              # biggest photo / PDF / voice file allowed
 MAX_FILES = 3                 # files per message
 
+# ---------- Brainzy logo (drawn in code, so it is always sharp) ----------
+def logo(size=40, gid="g"):
+    return (f'<svg width="{size}" height="{size}" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">'
+            f'<defs><linearGradient id="{gid}" x1="0" y1="0" x2="1" y2="1">'
+            '<stop offset="0" stop-color="#818CF8"/><stop offset="1" stop-color="#4338CA"/></linearGradient></defs>'
+            f'<rect width="64" height="64" rx="16" fill="url(#{gid})"/>'
+            '<path d="M22 16h12a9 9 0 0 1 0 18H22z M22 34h14a9 9 0 0 1 0 18H22z" fill="none" stroke="#FFFFFF" '
+            'stroke-width="5" stroke-linejoin="round"/>'
+            '<circle cx="48" cy="16" r="4.5" fill="#E0E7FF"/></svg>')
+
+
+# ---------- Splash screen with the logo, shown once when someone opens the app ----------
+if "splash_done" not in st.session_state:
+    splash = st.empty()
+    splash.markdown(f"""
+<style>
+@keyframes bz-in {{ 0% {{ opacity: 0; transform: scale(.85); }} 100% {{ opacity: 1; transform: scale(1); }} }}
+@keyframes bz-bar {{ 0% {{ width: 0; }} 100% {{ width: 160px; }} }}
+.bz-splash {{ position: fixed; inset: 0; z-index: 999999; background: radial-gradient(800px 400px at 50% 35%, #1E1B4B, #0B0F19 70%);
+             display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }}
+.bz-splash .mark {{ animation: bz-in .7s ease-out both; filter: drop-shadow(0 12px 40px rgba(99,102,241,.45)); }}
+.bz-splash .word {{ font-family: 'Inter', sans-serif; font-size: 2.6rem; font-weight: 800; color: #fff; letter-spacing: -.03em;
+                    animation: bz-in .7s .15s ease-out both; }}
+.bz-splash .word span {{ color: #818CF8; }}
+.bz-splash .tag {{ color: #9CA3AF; font-size: 1rem; animation: bz-in .7s .3s ease-out both; }}
+.bz-splash .bar {{ height: 3px; border-radius: 3px; background: #6366F1; animation: bz-bar 1.4s ease-in-out both; }}
+</style>
+<div class="bz-splash"><div class="mark">{logo(96, "gs")}</div>
+<div class="word">Brain<span>zy</span></div><div class="tag">Your expert for study, career and life</div>
+<div class="bar"></div></div>
+""", unsafe_allow_html=True)
+    time.sleep(1.6)
+    splash.empty()
+    st.session_state.splash_done = True
+
 # ---------- Professional styling ----------
 st.markdown(
     """
@@ -43,7 +78,8 @@ html, body, [class*="css"], .stMarkdown, button, input, textarea { font-family: 
 .section { font-size: 1.25rem; font-weight: 800; color: #F3F4F6; margin: 1.6rem 0 .8rem; }
 .page-title { font-size: 1.9rem; font-weight: 800; color: #F3F4F6; margin: 0; letter-spacing: -.015em; }
 .page-sub { color: #9CA3AF; margin: .3rem 0 1.4rem; }
-.brand { font-size: 1.55rem; font-weight: 800; color: #fff; letter-spacing: -.02em; }
+.brand { font-size: 1.55rem; font-weight: 800; color: #fff; letter-spacing: -.02em;
+         display: flex; align-items: center; gap: .6rem; }
 .brand span { color: #818CF8; }
 .brand-sub { color: #9CA3AF; font-size: .85rem; margin-bottom: 1rem; }
 .plan { background: #131A2A; border: 1px solid #1F2937; border-radius: 12px; padding: .8rem .9rem; }
@@ -120,23 +156,35 @@ for key, value in {"quiz": None, "quiz_result": None, "student_data": [], "chats
 
 
 # ---------- Free plan ----------
-@st.dialog("Upgrade to Brainzy Pro")
+@st.dialog("Brainzy plans", width="large")
 def show_plans():
-    c1, c2 = st.columns(2)
+    st.markdown("**Big AI quality at a student price.** Leading AI apps cost about Rs 5,600 a month. "
+                "Brainzy Pro yearly works out to about Rs 417 a month.")
+    c1, c2, c3 = st.columns(3)
     c1.markdown(f"""<div class="price"><h3>Free</h3><div class="amt">Rs 0</div>
-<ul><li>{FREE_LIMIT} AI requests per session</li><li>All 5 AI agents</li><li>All fields & both languages</li></ul></div>""",
+<ul><li>{FREE_LIMIT} AI requests per session</li><li>All 5 AI agents</li><li>21 modes, 50+ languages</li></ul></div>""",
                 unsafe_allow_html=True)
-    c2.markdown("""<div class="price pro"><h3>Pro</h3><div class="amt">Rs 499<span style="font-size:1rem;color:#9CA3AF">/month</span></div>
+    c2.markdown("""<div class="price"><h3>Pro Monthly</h3><div class="amt">Rs 2,000<span style="font-size:1rem;color:#9CA3AF">/month</span></div>
 <ul><li>Unlimited AI requests</li><li>Saved chat history</li><li>Priority speed</li><li>Parent progress reports</li></ul></div>""",
                 unsafe_allow_html=True)
-    st.info("Payments are coming soon. Brainzy Pro is not available to buy yet.")
+    c3.markdown("""<div class="price pro"><h3>Pro Yearly · Best value</h3><div class="amt">Rs 5,000<span style="font-size:1rem;color:#9CA3AF">/year</span></div>
+<ul><li>Everything in Pro</li><li>About Rs 417 a month</li><li>Save Rs 19,000 a year</li></ul></div>""",
+                unsafe_allow_html=True)
+    st.markdown("""
+| Price | ChatGPT Plus | Google AI Pro | **Brainzy Pro** |
+|---|---|---|---|
+| Per month | $20 (about Rs 5,600) | about Rs 5,600 | **Rs 2,000** |
+| Per year | about Rs 67,000 | about Rs 67,000 | **Rs 5,000** |
+""")
+    st.caption("Competitor prices are approximate and change over time. "
+               "Payments are coming soon: Brainzy Pro is not available to buy yet.")
 
 
 def spend_credit():
     """Use one free request. Returns False (and shows the upgrade box) when the limit is reached."""
     if st.session_state.used >= FREE_LIMIT:
         st.warning(f"You've used all {FREE_LIMIT} free requests for this session. "
-                   "Click **Upgrade to Pro** in the sidebar to see the Pro plan.")
+                   "Click **See plans** in the sidebar: Brainzy Pro is just Rs 5,000 a year.")
         return False
     st.session_state.used += 1
     return True
@@ -235,9 +283,19 @@ SUGGESTIONS = {
               "Make a 7-day study plan", "What are the most important topics to revise?"],
 }
 
+LANGUAGES = [
+    "English", "Urdu", "Arabic", "Chinese", "Spanish", "French", "German", "Hindi", "Bengali", "Punjabi",
+    "Pashto", "Sindhi", "Balochi", "Saraiki", "Kashmiri", "Persian", "Turkish", "Russian", "Portuguese",
+    "Indonesian", "Malay", "Japanese", "Korean", "Italian", "Dutch", "Swahili", "Hausa", "Yoruba", "Amharic",
+    "Somali", "Zulu", "Tamil", "Telugu", "Gujarati", "Marathi", "Kannada", "Malayalam", "Nepali", "Sinhala",
+    "Burmese", "Khmer", "Thai", "Vietnamese", "Filipino", "Greek", "Hebrew", "Polish", "Ukrainian", "Czech",
+    "Romanian", "Hungarian", "Swedish", "Norwegian", "Danish", "Finnish", "Azerbaijani", "Kazakh", "Uzbek", "Kurdish",
+]
+
 # ---------- Sidebar ----------
 with st.sidebar:
-    st.markdown('<div class="brand">Brain<span>zy</span></div><div class="brand-sub">AI learning & life platform</div>',
+    st.markdown(f'<div class="brand">{logo(38, "gb")}<div>Brain<span>zy</span></div></div>'
+                '<div class="brand-sub">AI learning & life platform</div>',
                 unsafe_allow_html=True)
     page = st.radio("Navigate", ["Home", "AI Assistant", "Writing Studio", "Practice Quiz",
                                  "Marketing Studio", "Progress Analytics"])
@@ -245,7 +303,7 @@ with st.sidebar:
     field = st.selectbox("Mode", list(FIELDS))
     level = st.selectbox("Your level", ["9th", "10th", "11th", "12th", "Diploma", "BS / Bachelor's",
                                         "Master's", "Working professional"], index=5)
-    language = st.radio("Language", ["English", "Urdu"], horizontal=True)
+    language = st.selectbox("Language", LANGUAGES)
     depth = st.select_slider("Answer depth", ["Simple", "Balanced", "Deep expert"], value="Balanced")
 
     st.divider()
@@ -254,7 +312,7 @@ with st.sidebar:
                 f'<span style="color:#9CA3AF;font-size:.85rem">{left} of {FREE_LIMIT} requests left</span></div>',
                 unsafe_allow_html=True)
     st.progress(min(st.session_state.used / FREE_LIMIT, 1.0))
-    if st.button("Upgrade to Pro", use_container_width=True):
+    if st.button("See plans · Rs 5,000/year", use_container_width=True):
         show_plans()
     st.markdown('<div class="privacy">🔒 Private by design: chats are not stored after you close this page. '
                 'Never share passwords or card numbers with any AI.</div>', unsafe_allow_html=True)
@@ -290,12 +348,13 @@ if page == "Home":
     st.markdown(
         """
 <div class="hero">
+  <div style="margin-bottom:1rem">LOGO_HERO</div>
   <div class="badge">Powered by a team of AI agents</div>
   <h1>Your expert for study,<br>career and life.</h1>
   <p>Brainzy is run entirely by AI agents. Ask by text, voice, photo or PDF, switch between 20+ expert modes,
-  practise with smart quizzes and track your progress, in English or Urdu, 24/7.</p>
+  practise with smart quizzes and track your progress, in 50+ languages, 24/7.</p>
 </div>
-""",
+""".replace("LOGO_HERO", logo(56, "gh")),
         unsafe_allow_html=True,
     )
 
@@ -303,7 +362,7 @@ if page == "Home":
     m1.metric("Availability", "24/7")
     m2.metric("AI agents", "5")
     m3.metric("Expert modes", str(len(FIELDS)))
-    m4.metric("Languages", "2")
+    m4.metric("Languages", str(len(LANGUAGES)))
 
     st.markdown('<p class="section">Meet your AI team</p>', unsafe_allow_html=True)
     cards = [
@@ -330,7 +389,8 @@ if page == "Home":
 | Progress tracking & study plan | ✗ | **✓ Analytics Agent** |
 | Choose simple or deep-expert answers | Ask every time | **✓ One slider** |
 | One-click "simpler / deeper / quiz me" | ✗ | **✓** |
-| Built for local students, English & Urdu | Partly | **✓** |
+| Built for local students, 50+ languages incl. Urdu | Partly | **✓** |
+| Yearly price | About Rs 67,000 | **Rs 5,000** |
 """)
     st.markdown('<p class="section">The road ahead</p>', unsafe_allow_html=True)
     road = [
@@ -550,9 +610,9 @@ elif page == "Marketing Studio":
         with st.container(border=True):
             st.write_stream(stream_ai(
                 f"""You are a marketing expert for "Brainzy", an AI learning and life platform run by AI agents,
-available 24/7 with a free plan and a low-cost Pro plan. It offers 20+ expert modes (medicine, engineering,
+available 24/7 with a free plan and a Pro plan at Rs 2,000 a month or just Rs 5,000 a year, far cheaper than other AI apps. It offers 20+ expert modes (medicine, engineering,
 IT, business, law, careers, fitness, wellbeing and more), quizzes, progress tracking and a writing studio,
-in English or Urdu. Users can ask by text, voice, photo or PDF.
+in 50+ languages. Users can ask by text, voice, photo or PDF.
 Write 3 different {platform} posts for {audience} in {language}.
 Catchy, short, professional, with a clear call to action like "Try it free today".
 Add 3-5 hashtags to each post."""
