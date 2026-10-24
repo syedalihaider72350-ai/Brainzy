@@ -8,7 +8,7 @@ from google import genai
 from google.genai import types
 
 st.set_page_config(page_title="Brainzy | AI Learning & Life Platform", page_icon="🧠", layout="wide")
-MODEL = "gemini-3.8-flash"
+MODEL = st.secrets.get("GEMINI_MODEL", "gemini-3.8-flash")   # change the model in Secrets anytime
 
 # ---------- Plan & security settings ----------
 FREE_LIMIT = 20               # AI requests per session on the free plan
@@ -82,7 +82,6 @@ html, body, [class*="css"], .stMarkdown, button, input, textarea { font-family: 
          display: flex; align-items: center; gap: .6rem; }
 .brand span { color: #818CF8; }
 .brand-sub { color: #9CA3AF; font-size: .85rem; margin-bottom: 1rem; }
-.plan { background: #131A2A; border: 1px solid #1F2937; border-radius: 12px; padding: .8rem .9rem; }
 .plan b { color: #E5E7EB; }
 .price { background: #131A2A; border: 1px solid #1F2937; border-radius: 16px; padding: 1.4rem; }
 .price.pro { border-color: #6366F1; box-shadow: 0 0 0 1px #6366F1 inset; }
@@ -91,6 +90,37 @@ html, body, [class*="css"], .stMarkdown, button, input, textarea { font-family: 
 .price li { color: #9CA3AF; margin: .25rem 0; }
 .privacy { color: #6B7280; font-size: .75rem; line-height: 1.45; margin-top: .8rem; }
 [data-testid="stMetricValue"] { font-weight: 800; }
+/* ----- Premium sidebar ----- */
+[data-testid="stSidebar"] { background: linear-gradient(180deg, #10142A 0%, #0B0F19 100%); border-right: 1px solid #1C2236; }
+[data-testid="stSidebar"] .block-container, [data-testid="stSidebarContent"] { padding-top: 1.2rem; }
+[data-testid="stSidebar"] hr { border-color: #1C2236; margin: .9rem 0; }
+.side-label { color: #6B7280; font-size: .68rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+              margin: .4rem 0 .35rem .2rem; }
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p { color: #9CA3AF; font-size: .78rem; font-weight: 600; }
+[data-testid="stSidebar"] [role="radiogroup"] { gap: 2px; }
+[data-testid="stSidebar"] [role="radiogroup"] label { width: 100%; padding: .55rem .7rem; border-radius: 10px;
+              transition: background .15s ease; cursor: pointer; }
+[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child { display: none; }
+[data-testid="stSidebar"] [role="radiogroup"] label p { font-size: .92rem; font-weight: 500; color: #C7CBE0; }
+[data-testid="stSidebar"] [role="radiogroup"] label:hover { background: #161C33; }
+[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) { background: rgba(99,102,241,.16);
+              box-shadow: inset 3px 0 0 #6366F1; }
+[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p { color: #FFFFFF; font-weight: 600; }
+[data-testid="stSidebar"] .stButton button { border-radius: 10px; border: 1px solid #1F2740; background: #121829;
+              color: #C7CBE0; justify-content: flex-start; font-size: .86rem; }
+[data-testid="stSidebar"] .stButton button:hover { border-color: #4F46E5; color: #FFFFFF; }
+[data-testid="stSidebar"] .stButton button[kind="primary"] { background: linear-gradient(135deg, #6366F1, #4338CA);
+              border: none; color: #FFFFFF; justify-content: center; font-weight: 600; }
+.plan { background: linear-gradient(135deg, rgba(99,102,241,.18), rgba(67,56,202,.06)); border: 1px solid #2B2F5C;
+        border-radius: 14px; padding: .85rem .95rem; }
+.plan .row { display: flex; justify-content: space-between; align-items: center; }
+.plan .pill { font-size: .66rem; font-weight: 700; letter-spacing: .08em; color: #C7D2FE; background: rgba(99,102,241,.25);
+              padding: .15rem .5rem; border-radius: 999px; }
+.side-foot { color: #4B5563; font-size: .7rem; margin-top: .6rem; }
+/* ----- Unique Brainzy chat avatars ----- */
+[data-testid="stChatMessage"] [data-testid^="stChatMessageAvatar"] { border-radius: 12px; color: #FFFFFF;
+              background: linear-gradient(135deg, #818CF8, #4338CA); box-shadow: 0 4px 14px rgba(99,102,241,.35); }
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarCustom"]) { border-radius: 16px; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -121,6 +151,7 @@ Markdown headings, short paragraphs, bullet points, numbered steps, tables for c
 def stream_ai(contents, system=None):
     """Stream the AI answer word by word, so it appears instantly."""
     config = types.GenerateContentConfig(system_instruction=SAFETY + "\n" + (system or ""))
+    last_error = ""
     for attempt in range(3):
         sent_any = False
         try:
@@ -131,12 +162,58 @@ def stream_ai(contents, system=None):
                     sent_any = True
                     yield chunk.text
             return
-        except Exception:
+        except Exception as e:
+            last_error = str(e)
             if sent_any:
                 yield "\n\n_Connection interrupted. Please try again._"
                 return
+            if any(code in last_error for code in ("400", "401", "403", "404")):
+                break          # retrying will not fix these
             time.sleep(3)
-    yield "The AI service is busy right now. Please try again in a moment."
+    yield explain_error(last_error)
+
+
+def explain_error(err):
+    """Turn Google's technical error into a clear message."""
+    e = err.upper()
+    if "429" in e or "RESOURCE_EXHAUSTED" in e or "QUOTA" in e:
+        return ("⏳ Brainzy has used up Google's free AI limit for now. Please wait a few minutes "
+                "(or until tomorrow for the daily limit) and try again.")
+    if "404" in e or "NOT_FOUND" in e:
+        return f"⚠️ The AI model `{MODEL}` was not found. Check the model name (GEMINI_MODEL) in Streamlit Secrets."
+    if "API_KEY" in e or "API KEY" in e or "PERMISSION_DENIED" in e or "401" in e or "403" in e:
+        return "🔑 The AI key is not working. Check GEMINI_API_KEY in Streamlit Secrets, or create a new key."
+    if "503" in e or "UNAVAILABLE" in e or "OVERLOADED" in e:
+        return "⏳ Google's AI servers are very busy right now. Please try again in a minute."
+    return f"⚠️ The AI could not answer right now. Details: {err[:200]}"
+
+
+def hide_next(gen, store):
+    """Show the answer while it streams, but hold back the hidden NEXT: suggestions line."""
+    buf, sent, stopped = "", 0, False
+    for piece in gen:
+        buf += piece
+        if stopped:
+            continue
+        i = buf.find("NEXT:")
+        if i >= 0:
+            if i > sent:
+                yield buf[sent:i]
+            sent, stopped = i, True
+            continue
+        safe = len(buf) - 6
+        if safe > sent:
+            yield buf[sent:safe]
+            sent = safe
+    if not stopped and len(buf) > sent:
+        yield buf[sent:]
+    store["text"] = buf
+
+
+def split_next(text):
+    answer, _, rest = text.partition("NEXT:")
+    ideas = [q.strip(" -*") for q in rest.split("|") if q.strip(" -*")][:3]
+    return answer.strip(), ideas
 
 
 def ask_ai(contents, system=None):
@@ -223,8 +300,11 @@ def to_contents(messages):
     return contents
 
 
+AVATARS = {"assistant": ":material/psychology:", "user": ":material/person:"}
+
+
 def show_message(m):
-    with st.chat_message(m["role"]):
+    with st.chat_message(m["role"], avatar=AVATARS[m["role"]]):
         for data, mime, name in m["files"]:
             if mime.startswith("image/"):
                 st.image(data, width=280)
@@ -235,6 +315,8 @@ def show_message(m):
 
 # ---------- Modes: each one turns the AI into a specialist ----------
 FIELDS = {
+    "Auto (Brainzy decides)": "First, silently work out the person's field or need from their message "
+                              "and answer as the best expert in that field.",
     # Study fields
     "General / School": "Teach like an excellent school teacher who follows the board syllabus.",
     "Medicine (MBBS)": "Act as a senior medical professor. Use correct medical terminology, explain anatomy, "
@@ -284,7 +366,7 @@ SUGGESTIONS = {
 }
 
 LANGUAGES = [
-    "English", "Urdu", "Arabic", "Chinese", "Spanish", "French", "German", "Hindi", "Bengali", "Punjabi",
+    "Auto (same as you)", "English", "Urdu", "Arabic", "Chinese", "Spanish", "French", "German", "Hindi", "Bengali", "Punjabi",
     "Pashto", "Sindhi", "Balochi", "Saraiki", "Kashmiri", "Persian", "Turkish", "Russian", "Portuguese",
     "Indonesian", "Malay", "Japanese", "Korean", "Italian", "Dutch", "Swahili", "Hausa", "Yoruba", "Amharic",
     "Somali", "Zulu", "Tamil", "Telugu", "Gujarati", "Marathi", "Kannada", "Malayalam", "Nepali", "Sinhala",
@@ -293,42 +375,69 @@ LANGUAGES = [
 ]
 
 # ---------- Sidebar ----------
+PAGES = {"Home": ":material/home:", "AI Assistant": ":material/forum:", "Writing Studio": ":material/edit_note:",
+         "Practice Quiz": ":material/quiz:", "Marketing Studio": ":material/campaign:",
+         "Progress Analytics": ":material/insights:"}
+
 with st.sidebar:
     st.markdown(f'<div class="brand">{logo(38, "gb")}<div>Brain<span>zy</span></div></div>'
                 '<div class="brand-sub">AI learning & life platform</div>',
                 unsafe_allow_html=True)
-    page = st.radio("Navigate", ["Home", "AI Assistant", "Writing Studio", "Practice Quiz",
-                                 "Marketing Studio", "Progress Analytics"])
-    st.divider()
-    field = st.selectbox("Mode", list(FIELDS))
-    level = st.selectbox("Your level", ["9th", "10th", "11th", "12th", "Diploma", "BS / Bachelor's",
-                                        "Master's", "Working professional"], index=5)
-    language = st.selectbox("Language", LANGUAGES)
-    depth = st.select_slider("Answer depth", ["Simple", "Balanced", "Deep expert"], value="Balanced")
+    st.markdown('<div class="side-label">Workspace</div>', unsafe_allow_html=True)
+    page = st.radio("Navigate", list(PAGES), format_func=lambda p: f"{PAGES[p]}  {p}",
+                    label_visibility="collapsed")
+
+    if page == "AI Assistant":
+        if st.button(":material/add:  New chat", use_container_width=True):
+            new_chat()
+            st.rerun()
+        st.markdown('<div class="side-label">Recent chats</div>', unsafe_allow_html=True)
+        for chat_id, chat in reversed(list(st.session_state.chats.items())):
+            is_open = chat_id == st.session_state.current_chat
+            label = f":material/chat_bubble:  {chat['title']}" if is_open else chat["title"]
+            if st.button(label, key=f"chat_{chat_id}", use_container_width=True):
+                st.session_state.current_chat = chat_id
+                st.rerun()
+
+    with st.expander(":material/tune:  Settings · Auto", expanded=False):
+        st.caption("Brainzy works these out for you. Change them only if you want to.")
+        field = st.selectbox("Mode", list(FIELDS))
+        level = st.selectbox("Your level", ["Auto", "9th", "10th", "11th", "12th", "Diploma", "BS / Bachelor's",
+                                            "Master's", "Working professional"])
+        language = st.selectbox("Language", LANGUAGES)
+        depth = st.select_slider("Answer depth", ["Simple", "Auto", "Deep expert"], value="Auto")
 
     st.divider()
     left = max(FREE_LIMIT - st.session_state.used, 0)
-    st.markdown(f'<div class="plan"><b>Free plan</b><br>'
-                f'<span style="color:#9CA3AF;font-size:.85rem">{left} of {FREE_LIMIT} requests left</span></div>',
+    st.markdown(f'<div class="plan"><div class="row"><b>Free plan</b><span class="pill">FREE</span></div>'
+                f'<span style="color:#9CA3AF;font-size:.8rem">{left} of {FREE_LIMIT} requests left</span></div>',
                 unsafe_allow_html=True)
     st.progress(min(st.session_state.used / FREE_LIMIT, 1.0))
-    if st.button("See plans · Rs 5,000/year", use_container_width=True):
+    if st.button("Upgrade · Rs 5,000/year", type="primary", use_container_width=True):
         show_plans()
     st.markdown('<div class="privacy">🔒 Private by design: chats are not stored after you close this page. '
-                'Never share passwords or card numbers with any AI.</div>', unsafe_allow_html=True)
+                'Never share passwords or card numbers with any AI.</div>'
+                '<div class="side-foot">Brainzy v1.0 · Powered by Gemini</div>', unsafe_allow_html=True)
 
 is_life = field.startswith("Life")
 DEPTH = {
     "Simple": "Answer depth: SIMPLE. Use everyday words, short sentences and one relatable example, "
               "as if explaining to a smart 12-year-old. Avoid jargon; if a technical word is needed, define it.",
-    "Balanced": "Answer depth: BALANCED. Give a clear, complete explanation with key terms defined, "
-                "examples and practical tips.",
+    "Auto": "Answer depth: AUTO. Match the depth to the person: simple and short for quick or basic questions, "
+            "clear and complete for normal questions, and deep and expert for advanced ones.",
     "Deep expert": "Answer depth: DEEP EXPERT. Give a rich, university-level answer: precise technical terminology, "
                    "underlying principles and mechanisms, edge cases, common misconceptions, real-world applications, "
                    "and connections to related topics. Then ALWAYS finish with a section titled "
                    "'In simple words' that explains the whole idea in 3-4 easy sentences.",
 }
-STUDENT = f"{level} learner using {field} mode"
+if language.startswith("Auto"):
+    language = "the same language the user writes in (English if unclear)"
+if level == "Auto":
+    STUDENT = "learner (work out their level from how they write and what they ask)"
+else:
+    STUDENT = f"{level} learner"
+if not field.startswith("Auto"):
+    STUDENT += f" in {field}"
 TUTOR_RULES = f"""You are Brainzy, a brilliant, professional AI assistant and tutor for a {STUDENT}.
 {FIELDS[field]}
 You can help with ANY question in life or knowledge: every study subject, coding and debugging, math,
@@ -341,7 +450,11 @@ If the user sends a PDF or notes, answer using that document.
 If the user sends a voice recording, treat it as their spoken question.
 {DEPTH[depth]}
 {FORMAT}
-When teaching, end with one short question to check understanding."""
+Predict what the person needs: if their request is vague, give the most useful answer for their likely goal
+instead of asking many questions. Never ask them to pick settings.
+At the very end, on its own last line, write exactly: NEXT: <follow-up 1> | <follow-up 2> | <follow-up 3>
+where each follow-up is a short next question this person is most likely to want, written as they would ask it,
+in their language."""
 
 # ---------- HOME ----------
 if page == "Home":
@@ -411,25 +524,14 @@ if page == "Home":
 
 # ---------- AGENT 1: AI ASSISTANT ----------
 elif page == "AI Assistant":
-    with st.sidebar:
-        st.divider()
-        if st.button("＋  New chat", use_container_width=True):
-            new_chat()
-            st.rerun()
-        st.caption("Your chats")
-        for chat_id, chat in reversed(list(st.session_state.chats.items())):
-            is_open = chat_id == st.session_state.current_chat
-            if st.button(chat["title"], key=f"chat_{chat_id}", use_container_width=True,
-                         type="primary" if is_open else "secondary"):
-                st.session_state.current_chat = chat_id
-                st.rerun()
-
-    page_header("AI Assistant", f"{field} · {level} · {language} · {depth}")
+    page_header("AI Assistant", "Just ask. Brainzy works out your subject, level and language.")
     messages = current_messages()
 
     if not messages:
-        st.caption("Ask anything, attach a photo or PDF, or ask by voice. Try one of these:")
-        ideas = SUGGESTIONS["Life" if is_life else "Study"]
+        st.caption("Ask anything in any language, attach a photo or PDF, or ask by voice. Or start here:")
+        ideas = (["Explain a topic I'm studying, simply", "Make me a 7-day study plan",
+                  "How do I start freelancing?", "Help me plan my week"]
+                 if field.startswith("Auto") else SUGGESTIONS["Life" if is_life else "Study"])
         cols = st.columns(2)
         for i, idea in enumerate(ideas):
             if cols[i % 2].button(idea, key=f"idea_{i}", use_container_width=True):
@@ -439,17 +541,12 @@ elif page == "AI Assistant":
     for m in messages:
         show_message(m)
 
-    # One-click follow-ups on the latest answer
-    if messages and messages[-1]["role"] == "assistant":
-        actions = {"Explain simpler": "Explain your last answer again in much simpler words.",
-                   "Go deeper": "Go deeper on your last answer, at an advanced expert level.",
-                   "More examples": "Give me 3 more real-life examples of your last answer.",
-                   "Quiz me on this": "Quiz me with 3 short questions on your last answer, one at a time.",
-                   "Summarise": "Summarise your last answer in 5 bullet points for quick revision."}
-        cols = st.columns(len(actions))
-        for col, (label, ask) in zip(cols, actions.items()):
-            if col.button(label, key=f"act_{label}_{len(messages)}", use_container_width=True):
-                st.session_state.pending = ask
+    # Brainzy predicts what you will want next
+    if messages and messages[-1]["role"] == "assistant" and messages[-1].get("ideas"):
+        st.caption("✨ Brainzy thinks you might want:")
+        for i, idea in enumerate(messages[-1]["ideas"]):
+            if st.button(idea, key=f"next_{i}_{len(messages)}"):
+                st.session_state.pending = idea
                 st.rerun()
 
     with st.popover("🎙  Ask by voice"):
@@ -492,9 +589,11 @@ elif page == "AI Assistant":
             chat["title"] = title[:30] + "…" if len(title) > 30 else title
         messages.append(new_msg)
         show_message(new_msg)
-        with st.chat_message("assistant"):
-            reply = st.write_stream(stream_ai(to_contents(messages), system=TUTOR_RULES))
-        messages.append({"role": "assistant", "text": reply, "display": reply, "files": []})
+        store = {}
+        with st.chat_message("assistant", avatar=AVATARS["assistant"]):
+            st.write_stream(hide_next(stream_ai(to_contents(messages), system=TUTOR_RULES), store))
+        reply, ideas = split_next(store.get("text", ""))
+        messages.append({"role": "assistant", "text": reply, "display": reply, "files": [], "ideas": ideas})
         st.rerun()
 
 # ---------- AGENT 2: WRITING ----------
@@ -502,26 +601,29 @@ elif page == "Writing Studio":
     page_header("Writing Studio", "The Writing Agent creates polished, professional documents in seconds.")
 
     with st.form("write_form"):
-        c1, c2 = st.columns(2)
-        doc_type = c1.selectbox("What do you need?", ["Article", "Blog post", "Essay", "Report", "Email",
-                                                       "Cover letter", "CV summary", "Summary", "Speech"])
-        tone = c2.selectbox("Tone", ["Professional", "Academic", "Persuasive", "Friendly", "Simple"])
-        topic = st.text_area("Topic or instructions", max_chars=MAX_CHARS,
-                             placeholder="e.g. How artificial intelligence is changing businesses in Pakistan")
-        c3, c4 = st.columns(2)
-        length = c3.select_slider("Length", ["Short", "Medium", "Long"], value="Medium")
-        notes = c4.text_input("Extra details (optional)", max_chars=500,
-                              placeholder="e.g. audience, key points, word limit")
+        topic = st.text_area("What should Brainzy write?", max_chars=MAX_CHARS, height=120,
+                             placeholder="e.g. A professional article on how AI is changing businesses in Pakistan, "
+                                         "or a cover letter for a data analyst internship")
+        with st.expander("Customise (optional)"):
+            c1, c2, c3 = st.columns(3)
+            doc_type = c1.selectbox("Type", ["Auto", "Article", "Blog post", "Essay", "Report", "Email",
+                                             "Cover letter", "CV summary", "Summary", "Speech"])
+            tone = c2.selectbox("Tone", ["Auto", "Professional", "Academic", "Persuasive", "Friendly", "Simple"])
+            length = c3.selectbox("Length", ["Auto", "Short", "Medium", "Long"])
         write = st.form_submit_button("Write it", type="primary")
 
     if write and topic and spend_credit():
-        words = {"Short": "about 300", "Medium": "about 700", "Long": "about 1,200"}[length]
+        how = []
+        how.append("Choose the best document type for this request." if doc_type == "Auto"
+                   else f"Document type: {doc_type.lower()}.")
+        how.append("Choose the most suitable tone." if tone == "Auto" else f"Tone: {tone.lower()}.")
+        how.append("Choose the right length for the purpose." if length == "Auto" else
+                   f"Length: about {dict(Short=300, Medium=700, Long=1200)[length]} words.")
         with st.container(border=True):
             draft = st.write_stream(stream_ai(
-                f"""Write a high-quality {tone.lower()} {doc_type.lower()} in {language} for a {STUDENT}.
-Topic / instructions: {topic}
-Extra details: {notes or 'none'}
-Length: {words} words.
+                f"""Request: {topic}
+{' '.join(how)}
+Write it in {language}, for a {STUDENT}.
 Make it polished and professional: a strong title, a clear introduction, well-organised
 sections with headings where suitable, smooth transitions and a strong conclusion.
 Use Markdown formatting. Do not invent fake statistics, quotes or sources;
@@ -580,14 +682,15 @@ Be encouraging."""
             if score is not None and score < 2:
                 quiz_topic = st.session_state.quiz["topic"]
                 with st.spinner("The AI Assistant is preparing a lesson for you..."):
-                    lesson = ask_ai(
+                    lesson, ideas = split_next(ask_ai(
                         f"I got a low score in a quiz on {quiz_topic}. Please re-teach me the basics simply.",
                         system=TUTOR_RULES,
-                    )
+                    ))
                 new_chat()
                 st.session_state.chats[st.session_state.current_chat]["title"] = f"Review: {quiz_topic}"[:31]
                 text = "**The Quiz Agent sent you here.** Let's review this topic together.\n\n" + lesson
-                current_messages().append({"role": "assistant", "text": text, "display": text, "files": []})
+                current_messages().append({"role": "assistant", "text": text, "display": text, "files": [],
+                                           "ideas": ideas})
                 st.session_state.quiz_result += (
                     "\n\n---\n**Low score detected.** The AI Assistant has prepared a lesson for you. "
                     "Open **AI Assistant** in the sidebar."
